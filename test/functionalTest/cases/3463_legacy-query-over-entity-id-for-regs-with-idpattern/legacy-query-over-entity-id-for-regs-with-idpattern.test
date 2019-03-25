@@ -200,7 +200,7 @@ Date: REGEX(.*)
 
 
 04. Create entity E1/T with attribute A1, in CP1
-=================================================
+================================================
 HTTP/1.1 201 Created
 Content-Length: 0
 Fiware-Correlator: REGEX([0-9a-f\-]{36})
@@ -209,7 +209,7 @@ Date: REGEX(.*)
 
 
 05. Create entity E2/T with attribute A2, in CP2
-=================================================
+================================================
 HTTP/1.1 201 Created
 Content-Length: 0
 Fiware-Correlator: REGEX([0-9a-f\-]{36})
@@ -218,7 +218,7 @@ Date: REGEX(.*)
 
 
 06. Create entity E3/T with attribute A3, in CP3
-=================================================
+================================================
 HTTP/1.1 201 Created
 Content-Length: 0
 Fiware-Correlator: REGEX([0-9a-f\-]{36})
@@ -229,12 +229,39 @@ Date: REGEX(.*)
 07. Query entities of type T - see E1, E2, and E3
 =================================================
 HTTP/1.1 200 OK
-Content-Length: 
+Content-Length: 217
 Content-Type: application/json
 Fiware-Correlator: REGEX([0-9a-f\-]{36})
 Date: REGEX(.*)
 
 [
+    {
+        "A1": {
+            "metadata": {}, 
+            "type": "Number", 
+            "value": "1"
+        }, 
+        "id": "E1", 
+        "type": "T"
+    }, 
+    {
+        "A2": {
+            "metadata": {}, 
+            "type": "Number", 
+            "value": "2"
+        }, 
+        "id": "E2", 
+        "type": "T"
+    }, 
+    {
+        "A3": {
+            "metadata": {}, 
+            "type": "Number", 
+            "value": "3"
+        }, 
+        "id": "E3", 
+        "type": "T"
+    }
 ]
 
 
@@ -246,11 +273,20 @@ Content-Type: application/json
 Fiware-Correlator: REGEX([0-9a-f\-]{36})
 Date: REGEX(.*)
 
+{
+    "A1": {
+        "metadata": {}, 
+        "type": "Number", 
+        "value": "1"
+    }, 
+    "id": "E1", 
+    "type": "T"
+}
 
 
 --TEARDOWN--
 brokerStop CB
-dbDrop CB
+#dbDrop CB
 dbDrop CP1
 dbDrop CP2
 dbDrop CP3

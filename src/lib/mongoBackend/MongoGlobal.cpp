@@ -1690,6 +1690,7 @@ bool entitiesQuery
       }
 
       cer->statusCode.fill(SccReceiverInternalError, exErr);
+      LM_T(LmtForward, ("Adding error item to cerV"));
       cerV->push_back(cer);
       releaseMongoConnection(connection);
       return true;
@@ -1751,6 +1752,7 @@ bool entitiesQuery
     }
 
     cer->statusCode.fill(SccOk);
+    LM_T(LmtForward, ("Adding item to cerV"));
     cerV->push_back(cer);
   }
   releaseMongoConnection(connection);
@@ -1809,6 +1811,7 @@ bool entitiesQuery
 
         cerP->statusCode.fill(SccOk);
 
+        LM_T(LmtForward, ("Adding item { '%s', '%s', '%s' } to cerV - 'need to add' due to isPattern", cerP->entity.id.c_str(), cerP->entity.isPattern.c_str(), cerP->entity.type.c_str()));
         cerV->push_back(cerP);
       }
     }
@@ -1886,12 +1889,16 @@ static void processEntity(ContextRegistrationResponse* crr, const EntityIdVector
   en.type      = entity.hasField(REG_ENTITY_TYPE)?      getStringFieldF(entity, REG_ENTITY_TYPE)      : "";
   en.isPattern = entity.hasField(REG_ENTITY_ISPATTERN)? getStringFieldF(entity, REG_ENTITY_ISPATTERN) : "false";
 
+  LM_T(LmtForward, ("Processing entity '%s' / '%s' / '%s'", en.id.c_str(), en.type.c_str(), en.isPattern.c_str()));
   if (includedEntity(en, enV))
   {
+    LM_T(LmtForward, ("Included!!!"));
     EntityId* enP = new EntityId(en.id, en.type, en.isPattern);
 
     crr->contextRegistration.entityIdVector.push_back(enP);
   }
+  else
+    LM_T(LmtForward, ("Not Included ..."));
 }
 
 
@@ -1937,6 +1944,7 @@ static void processContextRegistrationElement
 
   for (unsigned int ix = 0; ix < queryEntityV.size(); ++ix)
   {
+    LM_T(LmtForward, ("calling processEntity"));
     processEntity(&crr, enV, queryEntityV[ix].embeddedObject());
   }
 
@@ -2006,10 +2014,11 @@ bool registrationsQuery
 {
   /* Build query based on arguments */
   // FIXME P2: this implementation needs to be refactored for cleanup
-  std::string       contextRegistrationEntities     = REG_CONTEXT_REGISTRATION "." REG_ENTITIES;
-  std::string       contextRegistrationEntitiesId   = REG_CONTEXT_REGISTRATION "." REG_ENTITIES "." REG_ENTITY_ID;
-  std::string       contextRegistrationEntitiesType = REG_CONTEXT_REGISTRATION "." REG_ENTITIES "." REG_ENTITY_TYPE;
-  std::string       contextRegistrationAttrsNames   = REG_CONTEXT_REGISTRATION "." REG_ATTRS    "." REG_ATTRS_NAME;
+  std::string       contextRegistrationEntities           = REG_CONTEXT_REGISTRATION "." REG_ENTITIES;
+  std::string       contextRegistrationEntitiesId         = REG_CONTEXT_REGISTRATION "." REG_ENTITIES "." REG_ENTITY_ID;
+  std::string       contextRegistrationEntitiesType       = REG_CONTEXT_REGISTRATION "." REG_ENTITIES "." REG_ENTITY_TYPE;
+  std::string       contextRegistrationEntitiesIsPattern  = REG_CONTEXT_REGISTRATION "." REG_ENTITIES "." REG_ENTITY_ISPATTERN;
+  std::string       contextRegistrationAttrsNames         = REG_CONTEXT_REGISTRATION "." REG_ATTRS    "." REG_ATTRS_NAME;
   BSONArrayBuilder  entityOr;
   BSONArrayBuilder  entitiesWithType;
   BSONArrayBuilder  entitiesWithoutType;
@@ -2034,34 +2043,40 @@ bool registrationsQuery
     else  /* isPattern = false */
     {
       //
-      // The desired query:
-      // 1. If no entity type given:
-      //    => registration.entity.id == enV[ix].id    OR (registration.entity.isPattern == "true"  AND  registration.entity.id == ".*)
-      // 2. If entity type given:
-      //    (registration.entity.type == enV[ix].type) AND (registration.entity.id == enV[ix].id OR (registration.entity.isPattern == "true"  AND  registration.entity.id == ".*"))
+      // Entity with given ID
       //
-      // So, start with (registration.entity.isPattern == "true"  AND  registration.entity.id == ".*)
+      // Registration can be with ID Pattern: (registration.entity.isPattern == "true"  &&  registration.entity.id == '.*')
+      // Or, normal ID:                       (registration.entity.id == en.id)
+      // The entity type can be given or not.
       //
-      // BSONArrayBuilder entityIdAnd;
-      // 
+      // The query to mongo should look like this:
+      // 1. Without Entity Type:
+      //    query: { $or: [ { contextRegistration.entities.id: /.*/, contextRegistration.entities.isPattern: "true" }, { contextRegistration.entities.id: `en->id` } ] }
+      // 2. With Entity Type:
+      //    query: { contextRegistration.entities.type: `en->type`, $or: [ { contextRegistration.entities.id: /.*/, contextRegistration.entities.isPattern: "true" }, { contextRegistration.entities.id: `en->id` } ] }
       //
-      if (en->type == "")
+      BSONObjBuilder    ifIdPattern;
+      BSONObjBuilder    ifId;
+      BSONArrayBuilder  entityIdOr;
+      BSONObjBuilder    entityQuery;
+
+      ifIdPattern.append(contextRegistrationEntitiesIsPattern, "true");
+      ifIdPattern.append(contextRegistrationEntitiesId, ".*");
+      ifId.append(contextRegistrationEntitiesId, en->id);
+
+      entityIdOr.append(ifIdPattern.obj());
+      entityIdOr.append(ifId.obj());
+
+      if (en->type != "")
       {
-        entitiesWithoutType.append(en->id);
-        entitiesWithoutType.append(BSON(REG_ENTITY_ID << ".*" << REG_ENTITY_ISPATTERN << "true"));
-        LM_T(LmtMongo, ("Entity discovery without type: id '%s'", en->id.c_str()));
-        LM_T(LmtForward, ("Entity discovery without type: id '%s'", en->id.c_str()));
+        BSONObj ifType;
+
+        ifType = BSON(contextRegistrationEntitiesType << en->type);
+        entityQuery.appendElements(ifType);
       }
-      else
-      {
-        /* We have detected that sometimes mongo stores { id: ..., type ...} and sometimes { type: ..., id: ...},
-           so we have to take both of them into account
-        */
-        entitiesWithType.append(BSON(REG_ENTITY_ID << en->id << REG_ENTITY_TYPE << en->type));
-        entitiesWithType.append(BSON(REG_ENTITY_TYPE << en->type << REG_ENTITY_ID << en->id));
-        entitiesWithType.append(BSON(REG_ENTITY_ID << ".*" << REG_ENTITY_ISPATTERN << "true" << REG_ENTITY_TYPE << en->type));
-        LM_T(LmtForward, ("Entity discovery: {id: %s, type: %s}", en->id.c_str(), en->type.c_str()));
-      }
+
+      entityQuery.append("$or", entityIdOr.arr());
+      entityOr.append(entityQuery.obj());
     }
   }
 
@@ -2074,9 +2089,6 @@ bool registrationsQuery
     attrs.append(attrName);
     LM_T(LmtMongo, ("Attribute discovery: '%s'", attrName.c_str()));
   }
-
-  entityOr.append(BSON(contextRegistrationEntities   << BSON("$in" << entitiesWithType.arr())));
-  entityOr.append(BSON(contextRegistrationEntitiesId << BSON("$in" << entitiesWithoutType.arr())));
 
   BSONObjBuilder queryBuilder;
 
@@ -2116,6 +2128,7 @@ bool registrationsQuery
   DBClientBase* connection = getMongoConnection();
   std::string   colName    = getRegistrationsCollectionName(tenant);
 
+  LM_T(LmtForward, ("Calling collectionRangedQuery"));
   if (!collectionRangedQuery(connection, colName, query, limit, offset, &cursor, countP, err))
   {
     releaseMongoConnection(connection);
@@ -2145,6 +2158,7 @@ bool registrationsQuery
 
     for (unsigned int ix = 0 ; ix < queryContextRegistrationV.size(); ++ix)
     {
+      LM_T(LmtForward, ("Calling processContextRegistrationElement"));
       processContextRegistrationElement(queryContextRegistrationV[ix].embeddedObject(), enV, attrL, crrV, mimeType);
     }
 

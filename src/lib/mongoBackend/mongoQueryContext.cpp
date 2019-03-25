@@ -402,6 +402,7 @@ HttpStatusCode mongoQueryContext
 
   reqSemTake(__FUNCTION__, "ngsi10 query request", SemReadOp, &reqSemTaken);
 
+  LM_T(LmtForward, ("Calling entitiesQuery"));
   ok = entitiesQuery(requestP->entityIdVector,
                      requestP->attributeList,
                      requestP->restriction,
@@ -425,20 +426,24 @@ HttpStatusCode mongoQueryContext
 
     return SccOk;
   }
+  LM_T(LmtForward, ("entitiesQuery: %d items in rawCerV", rawCerV.size()));
+  cerVectorPresent("After entitiesQuery", rawCerV);
 
   ContextRegistrationResponseVector crrV;
 
   /* In the case of empty response, if only generic processing is needed */
   if (rawCerV.size() == 0)
   {
-    LM_T(LmtForward, ("Calling registrationsQuery I"));
+    LM_T(LmtForward, ("rawCerV is empty - calling registrationsQuery I"));
     if (registrationsQuery(requestP->entityIdVector, requestP->attributeList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
       crrVectorPresent("registrationsQuery I", crrV);
       if (crrV.size() > 0)
       {
+        LM_T(LmtForward, ("Calling processGenericEntities"));
         processGenericEntities(requestP->entityIdVector, rawCerV, crrV, limitReached);
+        LM_T(LmtForward, ("After processGenericEntities: %d items in rawCerV", rawCerV.size()));
       }
     }
 
@@ -446,9 +451,11 @@ HttpStatusCode mongoQueryContext
   }
 
   /* First CPr lookup (in the case some CER is not found): looking in E-A registrations */
-  if (someContextElementNotFound(rawCerV))
+  bool someNotFound = someContextElementNotFound(rawCerV);
+  LM_T(LmtForward, ("someContextElementNotFound returned %s", FT(someNotFound)));
+  if (someNotFound)
   {
-    LM_T(LmtForward, ("Calling registrationsQuery II"));
+    LM_T(LmtForward, ("some context element not found - calling registrationsQuery II"));
     if (registrationsQuery(requestP->entityIdVector, requestP->attributeList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
@@ -466,9 +473,10 @@ HttpStatusCode mongoQueryContext
   /* Second CPr lookup (in the case some elements still not being found): looking in E-<null> registrations */
   StringList attrNullList;
 
-  if (someContextElementNotFound(rawCerV))
+  someNotFound = someContextElementNotFound(rawCerV);
+  if (someNotFound)
   {
-    LM_T(LmtForward, ("Calling registrationsQuery III"));
+    LM_T(LmtForward, ("still some context element not found - calling registrationsQuery III"));
     if (registrationsQuery(requestP->entityIdVector, attrNullList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
@@ -488,7 +496,7 @@ HttpStatusCode mongoQueryContext
    */
   if (requestP->attributeList.size() == 0)
   {
-    LM_T(LmtForward, ("Calling registrationsQuery IV"));
+    LM_T(LmtForward, ("empty attribute list - calling registrationsQuery IV"));
     if (registrationsQuery(requestP->entityIdVector, requestP->attributeList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
@@ -503,13 +511,13 @@ HttpStatusCode mongoQueryContext
   }
 
   /* Prune "not found" CERs */
-  LM_T(LmtForward, ("Before pruning, we have %d elements in rawCerV", rawCerV.size()));
+  LM_T(LmtForward, ("Before pruning, we have %d elements in rawCerV and %d in responseP->contextElementResponseVector", rawCerV.size(), responseP->contextElementResponseVector.size()));
   // FIXME: call to cerVectorPresent to be removed once forwarding works
   cerVectorPresent("Before pruning", rawCerV);
   pruneContextElements(rawCerV, &responseP->contextElementResponseVector);
   // FIXME: call to cerVectorPresent to be removed once forwarding works
   cerVectorPresent("After pruning", rawCerV);
-  LM_T(LmtForward, ("After pruning, we have %d elements in contextElementResponseVector", responseP->contextElementResponseVector.size()));
+  LM_T(LmtForward, ("After pruning, we have %d elements in rawCerV and %d in responseP->contextElementResponseVector", rawCerV.size(), responseP->contextElementResponseVector.size()));
 
   /* Pagination stuff */
   if (responseP->contextElementResponseVector.size() == 0)

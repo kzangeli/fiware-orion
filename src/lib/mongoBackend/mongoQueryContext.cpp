@@ -435,7 +435,7 @@ HttpStatusCode mongoQueryContext
     if (registrationsQuery(requestP->entityIdVector, requestP->attributeList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
-      // crrVectorPresent("registrationsQuery I", crrV);
+      crrVectorPresent("registrationsQuery I", crrV);
       if (crrV.size() > 0)
       {
         processGenericEntities(requestP->entityIdVector, rawCerV, crrV, limitReached);
@@ -452,7 +452,7 @@ HttpStatusCode mongoQueryContext
     if (registrationsQuery(requestP->entityIdVector, requestP->attributeList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
-      // crrVectorPresent("registrationsQuery II", crrV);
+      crrVectorPresent("registrationsQuery II", crrV);
       if (crrV.size() > 0)
       {
         fillContextProviders(rawCerV, crrV);
@@ -472,7 +472,7 @@ HttpStatusCode mongoQueryContext
     if (registrationsQuery(requestP->entityIdVector, attrNullList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
-      // crrVectorPresent("registrationsQuery III", crrV);
+      crrVectorPresent("registrationsQuery III", crrV);
       if (crrV.size() > 0)
       {
         fillContextProviders(rawCerV, crrV);
@@ -483,8 +483,8 @@ HttpStatusCode mongoQueryContext
   }
 
   /* Special case: request with <null> attributes. In that case, entitiesQuery() may have captured some local attribute, but
-   * the list needs to be completed. Note that in the case of having this request someContextElementNotFound() is always false
-   * so we efficient not invoking registrationQuery() too much times
+   * the list needs to be completed. Note that for this type of request "someContextElementNotFound()" always returns false
+   * so we efficiently wont invoke registrationsQuery() too many times.
    */
   if (requestP->attributeList.size() == 0)
   {
@@ -492,7 +492,7 @@ HttpStatusCode mongoQueryContext
     if (registrationsQuery(requestP->entityIdVector, requestP->attributeList, &crrV, &err, tenant, servicePathV, 0, 0, false))
     {
       // FIXME: call to crrVectorPresent to be removed once forwarding works
-      // crrVectorPresent("registrationsQuery IV", crrV);
+      crrVectorPresent("registrationsQuery IV", crrV);
       if (crrV.size() > 0)
       {
         addContextProviders(rawCerV, crrV, limitReached);
@@ -505,10 +505,10 @@ HttpStatusCode mongoQueryContext
   /* Prune "not found" CERs */
   LM_T(LmtForward, ("Before pruning, we have %d elements in rawCerV", rawCerV.size()));
   // FIXME: call to cerVectorPresent to be removed once forwarding works
-  // cerVectorPresent("Before pruning", rawCerV);
+  cerVectorPresent("Before pruning", rawCerV);
   pruneContextElements(rawCerV, &responseP->contextElementResponseVector);
   // FIXME: call to cerVectorPresent to be removed once forwarding works
-  // cerVectorPresent("After pruning", rawCerV);
+  cerVectorPresent("After pruning", rawCerV);
   LM_T(LmtForward, ("After pruning, we have %d elements in contextElementResponseVector", responseP->contextElementResponseVector.size()));
 
   /* Pagination stuff */

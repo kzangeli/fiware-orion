@@ -1987,6 +1987,8 @@ static void processContextRegistrationElement
 * This method is used by discoverContextAvailabililty and subscribeContextAvailability. It takes
 * a vector with entities and a vector with attributes as input and returns the corresponding
 * ContextRegistrationResponseVector or error.
+*
+* It is also used by mongoQueryContext() to find out what forwarded requests that needs to be sent.
 */
 bool registrationsQuery
 (
@@ -2023,16 +2025,32 @@ bool registrationsQuery
       b.appendRegex(contextRegistrationEntitiesId, en->id);
       if (en->type != "")
       {
+        LM_T(LmtForward, ("Entity discovery: type: '%s'", en->type.c_str()));
         b.append(contextRegistrationEntitiesType, en->type);
       }
+      LM_T(LmtForward, ("Entity discovery: id: '%s'", en->id.c_str()));
       entityOr.append(b.obj());
     }
     else  /* isPattern = false */
     {
+      //
+      // The desired query:
+      // 1. If no entity type given:
+      //    => registration.entity.id == enV[ix].id    OR (registration.entity.isPattern == "true"  AND  registration.entity.id == ".*)
+      // 2. If entity type given:
+      //    (registration.entity.type == enV[ix].type) AND (registration.entity.id == enV[ix].id OR (registration.entity.isPattern == "true"  AND  registration.entity.id == ".*"))
+      //
+      // So, start with (registration.entity.isPattern == "true"  AND  registration.entity.id == ".*)
+      //
+      // BSONArrayBuilder entityIdAnd;
+      // 
+      //
       if (en->type == "")
       {
         entitiesWithoutType.append(en->id);
+        entitiesWithoutType.append(BSON(REG_ENTITY_ID << ".*" << REG_ENTITY_ISPATTERN << "true"));
         LM_T(LmtMongo, ("Entity discovery without type: id '%s'", en->id.c_str()));
+        LM_T(LmtForward, ("Entity discovery without type: id '%s'", en->id.c_str()));
       }
       else
       {
@@ -2041,7 +2059,8 @@ bool registrationsQuery
         */
         entitiesWithType.append(BSON(REG_ENTITY_ID << en->id << REG_ENTITY_TYPE << en->type));
         entitiesWithType.append(BSON(REG_ENTITY_TYPE << en->type << REG_ENTITY_ID << en->id));
-        LM_T(LmtMongo, ("Entity discovery: {id: %s, type: %s}", en->id.c_str(), en->type.c_str()));
+        entitiesWithType.append(BSON(REG_ENTITY_ID << ".*" << REG_ENTITY_ISPATTERN << "true" << REG_ENTITY_TYPE << en->type));
+        LM_T(LmtForward, ("Entity discovery: {id: %s, type: %s}", en->id.c_str(), en->type.c_str()));
       }
     }
   }
